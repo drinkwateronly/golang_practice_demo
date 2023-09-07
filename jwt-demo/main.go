@@ -97,5 +97,4 @@ func jwtRegisteredClaims() {
 	}
 	fmt.Println(t.Claims.GetIssuer())
 	fmt.Println(t.Claims.GetExpirationTime())
-
 }
