@@ -1,28 +1,36 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 )
 
-func main() {
-	/*
-		读取数据：
-			Reader接口
-				Read(p []byte) (n int, err error)
-	*/
-	filename := "io-demo/file-for-io"
-	file, err := os.Open(filename) // 只读
+func WriteToDemo() {
+	stdReader := bufio.NewReader(os.Stdin)
+	stdWriter := bufio.NewWriter(os.Stdout)
+	stdReader.WriteTo(stdWriter)
+}
+
+func ReadAtDemo() {
+	byteReader := bytes.NewReader([]byte("chenjiedashuaige"))
+	store := make([]byte, 5)
+	n, err := byteReader.ReadAt(store, 4)
 	if err != nil {
-		return
+		fmt.Println(err, n, string(store))
 	}
-	defer file.Close()
-	// 读取数据
-	bs := make([]byte, 3, 3)
-	n, err := file.Read(bs)
-	fmt.Println(err, n, string(bs)) // <nil> 3 123
-	n, err = file.Read(bs)
-	fmt.Println(err, n, string(bs)) //<nil> 2 453
-	n, err = file.Read(bs)
-	fmt.Println(err, n, string(bs)) // EOF 0 453
+	fmt.Println(err, n, string(store))
+}
+
+func WriteAtDemo() {
+	f, _ := os.OpenFile("./io-demo/file-for-io", os.O_RDWR, 0775)
+	defer f.Close()
+	f.WriteString("01234567890")
+	f.WriteAt([]byte("从第3个位置写入"), 3)
+}
+
+func main() {
+
+	WriteAtDemo()
 }
