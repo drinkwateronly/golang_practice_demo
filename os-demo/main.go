@@ -62,7 +62,7 @@ func fileOp() {
 	//func OpenFile(name string, flag int, perm FileMode) (file *File, err error)
 	//以读写方式打开文件，如果不存在，则创建
 	file, err := os.OpenFile("./test2.txt", os.O_RDWR|os.O_CREATE, 0766)
-
+	fmt.Println(file, err)
 }
 
 func main() {
