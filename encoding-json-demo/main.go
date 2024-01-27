@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -16,16 +17,18 @@ func demo1() {
 
 	type Person struct {
 		FirstName string  `json:"firstName"`       // 指定字段名
-		LastName  string  `json:"-"`               // "-"忽略某个字段
-		Email     string  `json:"email,omitempty"` // omitempty忽略空值字段，需要和指定字段名搭配使用
-		Age       uint    `json:"age"`
-		Height    float64 `json:"height"`
-		Sex       bool    `json:"sex"`
+		LastName  string  `json:"-"`               // 序列化/反序列化时，忽略该字段
+		Email     string  `json:"email,omitempty"` // "omitempty" 忽略空值字段，需要和指定字段名搭配使用
+		Age       uint    `json:"age"`             // 反序列化时，若为负值，解析失败。
+		Height    float64 `json:"height,string"`   // 序列化/反序列化时，该数字以字符串形式解析。若不是字符串形式，解析失败。
+		Sex       bool    `json:"sex"`             // 反序列化时，只能是true或false
+		IsNative  bool    `json:"isNative,string"` // 反序列化时，只能是"true"或"false"
 
 		PartnerA Partner  `json:"partnerA"`           // 嵌套结构体
-		PartnerB *Partner `json:"partnerB,omitempty"` // 只有嵌套结构体是指针时，才能忽略嵌套结构体的空值字段
+		PartnerB *Partner `json:"partnerB,omitempty"` // 只有嵌套结构体是指针时，才能被忽略空值
 	}
 
+	// 序列化
 	p := Person{
 		FirstName: "John",
 		LastName:  "Smith",
@@ -33,22 +36,42 @@ func demo1() {
 		Age:       11,
 		Height:    180.01,
 		Sex:       true,
+		IsNative:  false,
+
+		PartnerA: Partner{
+			Name: "",
+			Age:  0,
+		},
+		PartnerB: nil,
 	}
 	b, err := json.Marshal(p)
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Println("Marshal fail: ", err)
+	} else {
+		fmt.Printf("Marshal success: %v\n", string(b))
 	}
-	fmt.Println(string(b))
 
-	s := `{"firstName":"John", "lastName":"Smith","email":"john@example.com","age":11,"height":180.01,"sex":True,"partnerA":{"firstName":"","age":0}}`
+	// 反序列化
+	s := `{
+		"firstName":"John",
+		"lastName":"Smith",
+		"email":"john@example.com",
+		"age":11,
+		"height":"180.01",
+		"sex":true,
+		"isNative":"false",
+		"partnerA":{
+			"firstName":"",
+			"age":0
+		}
+	}`
 	var p2 Person
 	err = json.Unmarshal([]byte(s), &p2)
 	if err != nil {
-		fmt.Println(err)
-		return
+		fmt.Println("Unmarshal fail: ", err)
+	} else {
+		fmt.Printf("Unmarshal success: %+v\n", p2)
 	}
-	fmt.Printf("%+v", p2)
 }
 
 func Demo2() {
@@ -106,7 +129,7 @@ func parseTimeInDefaultDemo() {
 }
 
 type Order struct {
-	Name      string    `json:"name"`
+	Id        string    `json:"id"`
 	CreatedAt time.Time `json:"createdAt"`
 }
 
@@ -114,13 +137,15 @@ const layout = "2006-01-02 15:04:05"
 
 func (o *Order) MarshalJSON() ([]byte, error) {
 	type TempOrder Order // 定义与Order字段一致的新类型，避免直接嵌套Order进入死循环
-	return json.Marshal(struct {
+	ot := struct {
 		CreatedAt  string `json:"createdAt"`
 		*TempOrder        // 避免直接嵌套Order进入死循环
 	}{
 		CreatedAt: o.CreatedAt.Format(layout),
 		TempOrder: (*TempOrder)(o), // 类型转换，虽然TempOrder也有CreatedAt，但编译器会直接使用当前作用域已有的CreatedAt
-	})
+	}
+	fmt.Println("MarshalJSON: ", ot.CreatedAt)
+	return json.Marshal(ot)
 }
 
 func (o *Order) UnmarshalJSON(data []byte) error {
@@ -129,8 +154,9 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 		CreatedAt  string `json:"createdAt"`
 		*TempOrder        // 避免直接嵌套Order进入死循环
 	}{
-		TempOrder: (*TempOrder)(o), // 类型转换，当前作用域没有的CreatedAt，编译器会直接使用TempOrder的CreatedAt
+		TempOrder: (*TempOrder)(o), // 类型转换，虽然TempOrder也有CreatedAt，但编译器会直接使用当前作用域已有的CreatedAt，也就是空值str
 	}
+	fmt.Println("ot created: ", ot.CreatedAt)
 
 	if err := json.Unmarshal(data, &ot); err != nil {
 		return err
@@ -141,14 +167,66 @@ func (o *Order) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
+	fmt.Println("UnmarshalJSON: ", ot.CreatedAt)
 	return nil
 }
 
 func parseTimeInCustomDemo() {
+	// 反序列化
+	str := `{"id":"123","createdAt": "2024-01-25 01:23:45"}`
+	var order Order
+	err := json.Unmarshal([]byte(str), &order)
+	if err != nil {
+		// parsing time "2024-01-25 01:23:45" as "2006-01-02T15:04:05Z07:00": cannot parse " 01:23:45" as "T"
+		fmt.Println("unmarshal error: ", err)
+	} else {
+		fmt.Printf("unmarshal success: %+v\n", order)
+	}
 
+	// 序列化
+	b, err := json.Marshal(&Order{CreatedAt: time.Now(), Id: "123"})
+	if err != nil {
+		fmt.Println("marshal error:", err)
+	} else {
+		fmt.Println("marshal success: " + string(b))
+	}
+}
+
+func parseNumbersDemo() {
+	s := `{"name":"John", "age":123, "height": 1234567890}`
+	var m1 map[string]interface{}
+	// 常用的Unmarshal反序列化
+	err := json.Unmarshal([]byte(s), &m1)
+	if err != nil {
+		fmt.Println("Unmarshal fail: ", err)
+		return
+	}
+	fmt.Printf("value: %#v, type:%T\n", m1["name"], m1["name"])
+	fmt.Printf("value: %#v, type:%T\n", m1["age"], m1["age"])
+	fmt.Printf("value: %#v, type:%T\n", m1["height"], m1["height"])
+
+	// 使用decoder反序列化，指定使用number类型，此时会解析为json.Number类型
+	var m2 map[string]interface{}
+	decoder := json.NewDecoder(bytes.NewReader([]byte(s)))
+	decoder.UseNumber()
+
+	err = decoder.Decode(&m2)
+	if err != nil {
+		fmt.Println("Decode fail: ", err)
+		return
+	}
+	fmt.Printf("value: %#v, type:%T\n", m2["name"], m2["name"])
+	fmt.Printf("value: %#v, type:%T\n", m2["age"], m2["age"])
+	fmt.Printf("value: %#v, type:%T\n", m2["height"], m2["height"])
+
+	age, err := m2["age"].(json.Number).Int64()
+	if err != nil {
+		fmt.Println("parse to int64 fail: ", err)
+		return
+	}
+	fmt.Printf("value: %#v, type:%T\n", age, age)
 }
 
 func main() {
-	//demo3()
-	parseTimeInDefaultDemo()
+	parseNumbersDemo()
 }
