@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-//https://www.liwenzhou.com/posts/Go/json-tricks/#c-0-0-0
-
 func demo1() {
 	type Partner struct {
 		Name string `json:"firstName"`
@@ -228,5 +226,6 @@ func parseNumbersDemo() {
 }
 
 func main() {
+	demo1()
 	parseNumbersDemo()
 }
